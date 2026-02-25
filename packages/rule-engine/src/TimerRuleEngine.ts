@@ -61,6 +61,8 @@ export class TimerRuleEngine {
     integrations: Integrations,
     options: RuleEngineOptions,
   ): Promise<void> {
+    const timerStart = Date.now();
+    console.log({ s: 'ScheduleCheckStart', ts: timerStart });
     let schedulesToCreate: KairosScheduleOptions[] = [];
     const scheduler = new Kairos(kairosCredentials);
 
@@ -83,7 +85,9 @@ export class TimerRuleEngine {
         let existingSchedule;
         try {
           existingSchedule = (await scheduler.fetchSchedule(jobId)) as KairosSchedule;
-        } catch (err) {}
+        } catch (err) {
+          console.log({ s: 'ScheduleCheckError', ts: Date.now() });
+        }
         // If there are no existing schedules, create schedule object
         // and push it into the schedules array for bulk scheduling later.
 
@@ -156,7 +160,7 @@ export class TimerRuleEngine {
         return Promise.reject('Error creating bulk schedules');
       }
     }
-
+    console.log({ s: 'ScheduleCheckEnd', ts: Date.now(), d: Date.now() - timerStart });
     return Promise.resolve();
   }
 

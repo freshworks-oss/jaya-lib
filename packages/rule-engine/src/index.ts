@@ -47,16 +47,27 @@ export class RuleEngine {
     integrations: Integrations,
     kairosCredentials?: KairosCredentials,
   ): Promise<void> {
+    const eventStart = Date.now();
+    console.log({ s: 'EventReceived', ts: eventStart });
     if (options.isSchedulerEnabled && kairosCredentials) {
       // Invalidate existing schedules and process all timer rules.
+      const invStart = Date.now();
+      console.log({ s: 'ScheduleInvalidationStart', ts: invStart });
       await TimerRuleEngine.invalidateTimers(payload, rules, externalEventUrl, kairosCredentials, integrations);
+      console.log({ s: 'ScheduleInvalidationEnd', ts: Date.now(), d: Date.now() - invStart });
+      const schedStart = Date.now();
+      console.log({ s: 'ScheduleCreationStart', ts: schedStart });
       await TimerRuleEngine.triggerTimers(payload, rules, externalEventUrl, kairosCredentials, integrations, options);
+      console.log({ s: 'ScheduleCreationEnd', ts: Date.now(), d: Date.now() - schedStart });
     }
 
     // Process regular rules and get the actions of the first matching rule.
     try {
+      const ruleStart = Date.now();
+      console.log({ s: 'RuleEvaluationStart', ts: ruleStart });
       const firstMatchingRule = await RuleProcessor.getFirstMatchingRule(payload.event, payload.data, rules, integrations, options);
       if (firstMatchingRule?.actions?.length) {
+        console.log({ s: 'RuleMatched', ts: Date.now(), d: Date.now() - ruleStart });
         const ruleAlias = firstMatchingRule.ruleAlias || '';
         await ActionExecutor.handleActions(integrations, firstMatchingRule.actions, payload, apis, customPlaceholders, options, ruleAlias);
       }
@@ -66,6 +77,7 @@ export class RuleEngine {
       }
       throw err; // Rethrow the error to be handled by the caller.
     }
+    console.log({ s: 'EventProcessingEnd', ts: Date.now(), d: Date.now() - eventStart });
   }
 
   async processExternalEvent(

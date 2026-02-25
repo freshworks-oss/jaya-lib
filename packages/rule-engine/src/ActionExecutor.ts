@@ -183,7 +183,10 @@ export class ActionExecutor {
     const convFieldsMap = new Map<string, string>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const choicesMap = new Map<string, any>();
+    const propStart = Date.now();
+    console.log({ s: 'FetchConversationPropertiesStart', ts: propStart });
     const { data: conversationFieldsResponse, error } = await freshchat.getConversationPropertyFields();
+    console.log({ s: 'FetchConversationPropertiesEnd', ts: Date.now(), d: Date.now() - propStart });
     if (error) {
       Utils.log(
         productEventPayload,
@@ -199,9 +202,12 @@ export class ActionExecutor {
 
     placeholders = { ...placeholders, ...customPlaceholders };
 
+    console.log({ s: 'ActionLoopStart', ts: Date.now() });
     for (let i = 0; actions && i < actions.length; i += 1) {
+      const actionStart = Date.now();
       try {
         const action = actions[i];
+        console.log({ s: `ActionStart_${action.type}`, ts: actionStart });
         const placeholdersFromAction = await this.handleAction(
           integrations,
           action,
@@ -211,9 +217,10 @@ export class ActionExecutor {
           options,
           ruleAlias,
         );
-
+        console.log({ s: `ActionEnd_${action.type}`, ts: Date.now(), d: Date.now() - actionStart });
         placeholders = { ...placeholders, ...placeholdersFromAction };
       } catch (err) {
+        console.log({ s: `ActionEnd_${actions[i]?.type}`, ts: Date.now(), d: Date.now() - actionStart });
         // Error while executing an action
         // Queietly suppressing it so that next action can be executed
         // So, doing nothing here
