@@ -64,7 +64,7 @@ export class RuleEngine {
     // Process regular rules and get the actions of the first matching rule.
     try {
       const ruleStart = Date.now();
-      console.log({ s: 'RuleEvaluationStart', ts: ruleStart });
+      console.log({ s: 'CheckFirstMatchingRuleStart', ts: ruleStart });
       const firstMatchingRule = await RuleProcessor.getFirstMatchingRule(payload.event, payload.data, rules, integrations, options);
       if (firstMatchingRule?.actions?.length) {
         console.log({ s: 'RuleMatched', ts: Date.now(), d: Date.now() - ruleStart });

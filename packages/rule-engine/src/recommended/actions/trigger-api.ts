@@ -240,14 +240,10 @@ export default async (
     throw e; // re-throw the error after logging
   }
 
-  const requestStart = Date.now();
   try {
     console.log(JSON.stringify({
       s: 'CustomApiRequestStart',
-      ts: requestStart,
       apiName: triggerApi.name,
-      method: axiosRequestConfig.method,
-      url: axiosRequestConfig.url,
     }));
     const dateBeforeTrigger = new Date();
     const webhookResponse = await makeApiCall(axiosRequestConfig, triggerApi, integrations, productEventPayload);
@@ -255,18 +251,7 @@ export default async (
     const dateAfterTrigger = new Date();
     console.log(JSON.stringify({
       s: 'CustomApiRequestEnd',
-      ts: Date.now(),
       apiName: triggerApi.name,
-      method: axiosRequestConfig.method,
-      url: axiosRequestConfig.url,
-      status: webhookResponse?.status,
-      statusText: webhookResponse?.statusText,
-      d: Date.now() - requestStart,
-    }));
-    console.log(JSON.stringify({
-      s: 'CustomApiResponseData',
-      responseModelName: triggerApi.responseModelName,
-      data: webhookResponse?.data,
     }));
     logApiResponseTime(
       productEventPayload,
@@ -281,15 +266,7 @@ export default async (
   } catch (error) {
     console.log(JSON.stringify({
       s: 'CustomApiRequestError',
-      ts: Date.now(),
       apiName: triggerApi.name,
-      method: axiosRequestConfig.method,
-      url: axiosRequestConfig.url,
-      d: Date.now() - requestStart,
-      error: error instanceof Error ? error.message : String(error),
-      status:
-        (error as { status?: number; response?: { status?: number } })?.status ??
-        (error as { response?: { status?: number } })?.response?.status,
     }));
     Utils.log(productEventPayload, integrations, ErrorCodes.TriggerAPITrace, {
       apiName: triggerApi.name,

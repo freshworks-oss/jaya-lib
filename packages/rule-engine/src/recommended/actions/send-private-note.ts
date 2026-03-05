@@ -33,11 +33,6 @@ export default async (
       options,
       ruleAlias,
     );
-    console.log(JSON.stringify({
-      s: 'SendPrivateNoteApiPlaceholders',
-      actionValue,
-      placeholders: generatedPlaceholders,
-    }));
 
     const combinedPlaceholders = { ...placeholders, ...generatedPlaceholders };
 
