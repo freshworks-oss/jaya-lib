@@ -241,18 +241,10 @@ export default async (
   }
 
   try {
-    console.log(JSON.stringify({
-      s: 'CustomApiRequestStart',
-      apiName: triggerApi.name,
-    }));
     const dateBeforeTrigger = new Date();
     const webhookResponse = await makeApiCall(axiosRequestConfig, triggerApi, integrations, productEventPayload);
 
     const dateAfterTrigger = new Date();
-    console.log(JSON.stringify({
-      s: 'CustomApiRequestEnd',
-      apiName: triggerApi.name,
-    }));
     logApiResponseTime(
       productEventPayload,
       integrations,
@@ -264,10 +256,6 @@ export default async (
   
     return { [triggerApi.responseModelName]: webhookResponse.data };
   } catch (error) {
-    console.log(JSON.stringify({
-      s: 'CustomApiRequestError',
-      apiName: triggerApi.name,
-    }));
     Utils.log(productEventPayload, integrations, ErrorCodes.TriggerAPITrace, {
       apiName: triggerApi.name,
       error: error as AnyJson,
