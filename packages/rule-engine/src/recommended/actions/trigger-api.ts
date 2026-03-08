@@ -241,10 +241,6 @@ export default async (
   }
 
   try {
-    console.log(JSON.stringify({
-      s: 'CustomApiRequestStart',
-      apiName: triggerApi.name,
-    }));
     const dateBeforeTrigger = new Date();
     const webhookResponse = await makeApiCall(axiosRequestConfig, triggerApi, integrations, productEventPayload);
 
