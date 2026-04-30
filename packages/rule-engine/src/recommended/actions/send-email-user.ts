@@ -89,7 +89,8 @@ export default async (
     );
   } catch (err) {
     Utils.log(productEventPayload, integrations, ErrorCodes.SendEmail, {
-      error: err as AnyJson,
+      error: (axios.isAxiosError(err) ? err.response?.data : err) as AnyJson,
+      errorMessage: err instanceof Error ? err.message : String(err),
     });
     return Promise.reject('Error sending conversation as html via email');
   }
