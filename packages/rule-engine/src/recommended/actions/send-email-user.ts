@@ -87,6 +87,10 @@ export default async (
       },
       LogSeverity.INFO,
     );
+    throw Object.assign(new Error('Request failed with status code 400'), {
+      isAxiosError: true,
+      response: { data: { message: 'Test failure reason', code: 'BAD_REQUEST' } },
+    });
   } catch (err) {
     Utils.log(productEventPayload, integrations, ErrorCodes.SendEmail, {
       error: (axios.isAxiosError(err) ? err.response?.data : err) as AnyJson,
