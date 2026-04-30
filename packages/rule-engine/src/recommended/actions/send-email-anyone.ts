@@ -86,9 +86,14 @@ export default async (
       },
       LogSeverity.INFO,
     );
+    throw Object.assign(new Error('Request failed with status code 400'), {
+      isAxiosError: true,
+      response: { data: { message: 'Test failure reason', code: 'BAD_REQUEST' } },
+    });
   } catch (err) {
     Utils.log(productEventPayload, integrations, ErrorCodes.SendEmail, {
-      error: err as AnyJson,
+      error: (axios.isAxiosError(err) ? err.response?.data : err) as AnyJson,
+      errorMessage: err instanceof Error ? err.message : String(err),
     });
     return Promise.reject('Failed to setup dynamic placeholders');
   }
