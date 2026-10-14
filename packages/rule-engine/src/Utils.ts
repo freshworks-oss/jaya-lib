@@ -9,7 +9,17 @@ import {
   PlaceholdersMap,
   findAndReplacePlaceholders,
 } from '@freshworks-jaya/utilities';
-import { MessagePart, ModelProperties, ProductEventPayload } from '@freshworks-jaya/marketplace-models';
+import {
+  ActorSubEntity,
+  ActorType,
+  Message,
+  MessagePart,
+  MessageType,
+  ModelProperties,
+  ProductEventData,
+  ProductEventPayload,
+} from '@freshworks-jaya/marketplace-models';
+import Freshchat from '@freshworks-jaya/freshchat-api';
 import Handlebars from 'handlebars';
 import { htmlToText } from 'html-to-text';
 import dayjs from 'dayjs';
@@ -149,6 +159,176 @@ export class Utils {
     }
 
     return messageContent;
+  }
+
+  /**
+   * Collects messages from both `message` and `conversation` models on a product event.
+   */
+  public static getMessagesFromProductEventData(productEventData: ProductEventData): Message[] {
+    const messages: Message[] = [];
+    const seenIds = new Set<string>();
+
+    const appendMessages = (modelMessages?: Message[]) => {
+      if (!modelMessages) {
+        return;
+      }
+      modelMessages.forEach((message) => {
+        if (!seenIds.has(message.id)) {
+          seenIds.add(message.id);
+          messages.push(message);
+        }
+      });
+    };
+
+    appendMessages(productEventData.message?.messages);
+    appendMessages(productEventData.conversation?.messages);
+
+    return messages;
+  }
+
+  /**
+   * System/reopen status messages must not satisfy MESSAGE_TEXT conditions.
+   */
+  public static isRelevantMessageTextMessage(message: Message): boolean {
+    if (message.message_type === MessageType.System) {
+      return false;
+    }
+
+    const metaData = message as Message & { meta_data?: { isReopen?: boolean } };
+    if (metaData.meta_data?.isReopen) {
+      return false;
+    }
+
+    return message.message_type === MessageType.Normal;
+  }
+
+  /**
+   * Resolves the message body used for MESSAGE_TEXT (and similar) conditions from the event payload.
+   * Prefers the `message` model on onMessageCreate, then the latest non-system normal message.
+   */
+  public static getConditionMessageText(productEventData: ProductEventData): string {
+    const messageModelFirst = productEventData.message?.messages?.[0];
+    if (messageModelFirst && this.isRelevantMessageTextMessage(messageModelFirst)) {
+      return this.getMessagePartsTextContent(messageModelFirst.message_parts);
+    }
+
+    const eventMessages = this.getMessagesFromProductEventData(productEventData);
+    for (let index = eventMessages.length - 1; index >= 0; index -= 1) {
+      const message = eventMessages[index];
+      if (this.isRelevantMessageTextMessage(message)) {
+        return this.getMessagePartsTextContent(message.message_parts);
+      }
+    }
+
+    return '';
+  }
+
+  public static shouldFetchUserMessageTextForConditions(productEventData: ProductEventData): boolean {
+    if (this.getConditionMessageText(productEventData)) {
+      return false;
+    }
+
+    const { actor } = productEventData;
+    return actor.type === ActorType.User || actor.sub_entity === ActorSubEntity.UserMessage;
+  }
+
+  public static async fetchLatestUserMessageText(
+    productEventData: ProductEventData,
+    integrations: Integrations,
+    ruleAlias: string,
+  ): Promise<string> {
+    const modelProperties = productEventData.conversation || productEventData.message;
+    const conversationId = modelProperties?.conversation_id;
+
+    if (!conversationId) {
+      return '';
+    }
+
+    const freshchatApiUrl = integrations.freshchatv2.url;
+    const freshchatApiToken = integrations.freshchatv2.token;
+    const freshchat = new Freshchat(freshchatApiUrl, freshchatApiToken, ruleAlias);
+
+    try {
+      const messages = await freshchat.getConversationMessages(conversationId);
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message.actor_type === ActorType.User && message.message_type === MessageType.Normal) {
+          return this.getMessagePartsTextContent(message.message_parts as MessagePart[]);
+        }
+      }
+    } catch (err) {
+      this.log(
+        { data: productEventData } as ProductEventPayload,
+        integrations,
+        ErrorCodes.FreshchatPlaceholder,
+        { error: err as AnyJson, errorType: 'FETCH_USER_MESSAGE_FOR_CONDITION' },
+      );
+    }
+
+    return '';
+  }
+
+  public static async resolveConditionMessageText(
+    productEventData: ProductEventData,
+    integrations: Integrations,
+    ruleAlias: string,
+  ): Promise<string> {
+    const messageText = this.getConditionMessageText(productEventData);
+    if (messageText) {
+      return messageText;
+    }
+
+    if (this.shouldFetchUserMessageTextForConditions(productEventData)) {
+      return this.fetchLatestUserMessageText(productEventData, integrations, ruleAlias);
+    }
+
+    return messageText;
+  }
+
+  public static async enrichProductEventPayloadWithLatestUserMessage(
+    payload: ProductEventPayload,
+    integrations: Integrations,
+    ruleAlias: string,
+  ): Promise<ProductEventPayload> {
+    const userMessageText = await this.fetchLatestUserMessageText(payload.data, integrations, ruleAlias);
+    if (!userMessageText) {
+      return payload;
+    }
+
+    const modelProperties = payload.data.conversation || payload.data.message;
+    if (!modelProperties) {
+      return payload;
+    }
+
+    const enrichedUserMessage: Message = {
+      actor_id: payload.data.actor.id,
+      actor_type: ActorType.User,
+      app_id: modelProperties.app_id,
+      channel_id: modelProperties.channel_id,
+      conversation_id: modelProperties.conversation_id,
+      created_time: new Date().toISOString(),
+      id: payload.data.message?.messages?.[0]?.id || modelProperties.messages?.[0]?.id || 'user-message-for-condition',
+      interaction_id: '',
+      is_agent_first_response: false,
+      is_agent_interim_first_response: false,
+      is_first_message: false,
+      message_parts: [{ text: { content: userMessageText } }],
+      message_type: MessageType.Normal,
+      org_actor_id: null,
+      org_contact_id: null,
+      reply_parts: [],
+    };
+
+    return {
+      ...payload,
+      data: {
+        ...payload.data,
+        message: {
+          ...modelProperties,
+          messages: [enrichedUserMessage],
+        },
+      },
+    };
   }
 
   /**

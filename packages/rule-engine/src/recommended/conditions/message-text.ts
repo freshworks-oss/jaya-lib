@@ -3,18 +3,18 @@ import { Condition } from '../../models/rule';
 import { Utils } from '../../Utils';
 import { Integrations, RuleEngineOptions } from '../../models/rule-engine';
 
-export default (
+export default async (
   condition: Condition,
   productEventData: ProductEventData,
   integrations: Integrations,
   options: RuleEngineOptions,
   ruleAlias: string,
 ): Promise<void> => {
-  const modelProperties = productEventData.conversation || productEventData.message;
+  const messageText = await Utils.resolveConditionMessageText(productEventData, integrations, ruleAlias);
 
   return Utils.evaluateCondition(
     condition.operator,
-    Utils.getMessagePartsTextContent((modelProperties.messages && modelProperties.messages[0].message_parts) || []),
+    messageText,
     condition.value as string,
     integrations,
     options,

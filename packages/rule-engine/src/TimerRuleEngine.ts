@@ -4,8 +4,9 @@ import { ActionExecutor } from './ActionExecutor';
 import {
   AnyJson,
   Api,
+  ConditionKey,
   CustomPlaceholdersMap,
-  Rule
+  Rule,
 } from './models/rule';
 import { RuleProcessor } from './RuleProcessor';
 import {
@@ -18,6 +19,12 @@ import { Utils } from './Utils';
 import { ErrorCodes, ErrorTypes, APITraceCodes } from './models/error-codes';
 import { LogSeverity } from './services/GoogleCloudLogging';
 import { assignmentConditions } from './models/constants';
+
+const ruleHasMessageTextConditions = (rule: Rule): boolean =>
+  rule.blocks?.some((block) =>
+    block.conditions?.some((condition) => condition.key === ConditionKey.MessageText),
+  ) ?? false;
+
 export class TimerRuleEngine {
   /**
    * Add minutes to date object.
@@ -229,10 +236,38 @@ export class TimerRuleEngine {
 
     // Execute actions
     if (timerRule && Array.isArray(timerRule.actions)) {
+      let payloadForExecution = originalPayload;
+
+      if (ruleHasMessageTextConditions(timerRule)) {
+        payloadForExecution = await Utils.enrichProductEventPayloadWithLatestUserMessage(
+          originalPayload,
+          integrations,
+          timerRule.ruleAlias || '',
+        );
+
+        try {
+          await RuleProcessor.isRuleBlocksMatching(
+            payloadForExecution.data,
+            timerRule,
+            integrations,
+            options,
+          );
+        } catch {
+          await Utils.log(
+            payloadForExecution,
+            integrations,
+            APITraceCodes.EXECUTE_SCHEDULE_CONDITIONS_NOT_MET,
+            { jobId: externalEventPayload.data?.jobId },
+            LogSeverity.DEBUG,
+          );
+          return Promise.resolve();
+        }
+      }
+
       return ActionExecutor.handleActions(
         integrations,
         timerRule.actions,
-        originalPayload,
+        payloadForExecution,
         apis,
         customPlaceholders,
         options,
