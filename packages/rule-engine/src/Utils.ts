@@ -9,7 +9,14 @@ import {
   PlaceholdersMap,
   findAndReplacePlaceholders,
 } from '@freshworks-jaya/utilities';
-import { MessagePart, ModelProperties, ProductEventPayload } from '@freshworks-jaya/marketplace-models';
+import {
+  Message,
+  MessagePart,
+  MessageType,
+  ModelProperties,
+  ProductEventData,
+  ProductEventPayload,
+} from '@freshworks-jaya/marketplace-models';
 import Handlebars from 'handlebars';
 import { htmlToText } from 'html-to-text';
 import dayjs from 'dayjs';
@@ -149,6 +156,25 @@ export class Utils {
     }
 
     return messageContent;
+  }
+
+  /**
+   * Text used by MESSAGE_TEXT conditions: the latest normal message in the payload, ignoring
+   * system and reopen status messages.
+   */
+  public static getConditionMessageText(productEventData: ProductEventData): string {
+    const messages: Message[] = [
+      ...(productEventData.conversation?.messages || []),
+      ...(productEventData.message?.messages || []),
+    ];
+    const relevant = messages.filter(
+      (message) =>
+        message.message_type === MessageType.Normal &&
+        !(message as Message & { meta_data?: { isReopen?: boolean } }).meta_data?.isReopen,
+    );
+    const latest = relevant[relevant.length - 1];
+
+    return latest ? this.getMessagePartsTextContent(latest.message_parts) : '';
   }
 
   /**
