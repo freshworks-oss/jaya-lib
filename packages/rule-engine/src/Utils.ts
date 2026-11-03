@@ -273,16 +273,41 @@ export class Utils {
     integrations: Integrations,
     ruleAlias: string,
   ): Promise<string> {
-    const messageText = this.getConditionMessageText(productEventData);
-    if (messageText) {
-      return messageText;
+    return (await this.resolveConditionMessageTextResult(productEventData, integrations, ruleAlias)).text;
+  }
+
+  /**
+   * Resolves the MESSAGE_TEXT value and reports whether it was resolved from an actual user message.
+   *
+   * `resolved` is true only when a real user message (inline or fetched) was found. It is false when
+   * the only message available is a system/reopen status line and no user message could be recovered.
+   * Callers evaluating "absence" operators (DOES_NOT_CONTAIN / CONTAINS_NONE_OF) must treat an
+   * unresolved result as fail-closed so a reopen event cannot satisfy the exclusion by virtue of an
+   * empty string.
+   */
+  public static async resolveConditionMessageTextResult(
+    productEventData: ProductEventData,
+    integrations: Integrations,
+    ruleAlias: string,
+  ): Promise<{ resolved: boolean; text: string }> {
+    const inlineText = this.getConditionMessageText(productEventData);
+    if (inlineText) {
+      return { resolved: true, text: inlineText };
     }
 
+    // No usable inline text. This happens on reopen/system events where the inline payload only
+    // carries the reopen status message. Try to recover the real user message from the API.
     if (this.shouldFetchUserMessageTextForConditions(productEventData)) {
-      return this.fetchLatestUserMessageText(productEventData, integrations, ruleAlias);
+      const fetchedText = await this.fetchLatestUserMessageText(productEventData, integrations, ruleAlias);
+      if (fetchedText) {
+        return { resolved: true, text: fetchedText };
+      }
+      // User-origin event but no user message could be recovered (fetch failed or returned none).
+      return { resolved: false, text: '' };
     }
 
-    return messageText;
+    // Not a user-origin event and no relevant inline message: the MESSAGE_TEXT context is unresolved.
+    return { resolved: false, text: '' };
   }
 
   public static async enrichProductEventPayloadWithLatestUserMessage(
@@ -319,12 +344,18 @@ export class Utils {
       reply_parts: [],
     };
 
+    // Build the `message` model for the enriched payload. Prefer the existing `message` model shape
+    // when present (onMessageCreate); otherwise fall back to the conversation/message model
+    // properties so the required ModelProperties fields are populated. Only `messages` is overridden
+    // so downstream MESSAGE_TEXT re-evaluation reads the real user message.
+    const baseMessageModel = payload.data.message || modelProperties;
+
     return {
       ...payload,
       data: {
         ...payload.data,
         message: {
-          ...modelProperties,
+          ...baseMessageModel,
           messages: [enrichedUserMessage],
         },
       },
