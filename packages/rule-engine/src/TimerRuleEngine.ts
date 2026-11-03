@@ -236,25 +236,13 @@ export class TimerRuleEngine {
 
     // Execute actions
     if (timerRule && Array.isArray(timerRule.actions)) {
-      let payloadForExecution = originalPayload;
-
       if (ruleHasMessageTextConditions(timerRule)) {
-        payloadForExecution = await Utils.enrichProductEventPayloadWithLatestUserMessage(
-          originalPayload,
-          integrations,
-          timerRule.ruleAlias || '',
-        );
-
+        // Conditions were evaluated when the timer was scheduled; re-check at execution time.
         try {
-          await RuleProcessor.isRuleBlocksMatching(
-            payloadForExecution.data,
-            timerRule,
-            integrations,
-            options,
-          );
+          await RuleProcessor.isRuleBlocksMatching(originalPayload.data, timerRule, integrations, options);
         } catch {
           await Utils.log(
-            payloadForExecution,
+            originalPayload,
             integrations,
             APITraceCodes.EXECUTE_SCHEDULE_CONDITIONS_NOT_MET,
             { jobId: externalEventPayload.data?.jobId },
@@ -267,7 +255,7 @@ export class TimerRuleEngine {
       return ActionExecutor.handleActions(
         integrations,
         timerRule.actions,
-        payloadForExecution,
+        originalPayload,
         apis,
         customPlaceholders,
         options,

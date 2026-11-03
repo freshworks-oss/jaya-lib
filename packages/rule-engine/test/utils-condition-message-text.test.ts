@@ -53,7 +53,6 @@ describe('Utils.getConditionMessageText', () => {
     } as unknown as ProductEventData;
 
     assert.equal(Utils.getConditionMessageText(productEventData), '');
-    assert.isTrue(Utils.shouldFetchUserMessageTextForConditions(productEventData));
   });
 
   it('prefers user message when both reopen system and user messages are present', () => {

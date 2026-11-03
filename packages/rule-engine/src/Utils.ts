@@ -10,7 +10,6 @@ import {
   findAndReplacePlaceholders,
 } from '@freshworks-jaya/utilities';
 import {
-  ActorSubEntity,
   ActorType,
   Message,
   MessagePart,
@@ -162,74 +161,22 @@ export class Utils {
   }
 
   /**
-   * Collects messages from both `message` and `conversation` models on a product event.
-   */
-  public static getMessagesFromProductEventData(productEventData: ProductEventData): Message[] {
-    const messages: Message[] = [];
-    const seenIds = new Set<string>();
-
-    const appendMessages = (modelMessages?: Message[]) => {
-      if (!modelMessages) {
-        return;
-      }
-      modelMessages.forEach((message) => {
-        if (!seenIds.has(message.id)) {
-          seenIds.add(message.id);
-          messages.push(message);
-        }
-      });
-    };
-
-    appendMessages(productEventData.message?.messages);
-    appendMessages(productEventData.conversation?.messages);
-
-    return messages;
-  }
-
-  /**
-   * System/reopen status messages must not satisfy MESSAGE_TEXT conditions.
-   */
-  public static isRelevantMessageTextMessage(message: Message): boolean {
-    if (message.message_type === MessageType.System) {
-      return false;
-    }
-
-    const metaData = message as Message & { meta_data?: { isReopen?: boolean } };
-    if (metaData.meta_data?.isReopen) {
-      return false;
-    }
-
-    return message.message_type === MessageType.Normal;
-  }
-
-  /**
-   * Resolves the message body used for MESSAGE_TEXT (and similar) conditions from the event payload.
-   * Prefers the `message` model on onMessageCreate, then the latest non-system normal message.
+   * Text used by MESSAGE_TEXT conditions: the latest normal message in the payload, ignoring
+   * system and reopen status messages.
    */
   public static getConditionMessageText(productEventData: ProductEventData): string {
-    const messageModelFirst = productEventData.message?.messages?.[0];
-    if (messageModelFirst && this.isRelevantMessageTextMessage(messageModelFirst)) {
-      return this.getMessagePartsTextContent(messageModelFirst.message_parts);
-    }
+    const messages: Message[] = [
+      ...(productEventData.conversation?.messages || []),
+      ...(productEventData.message?.messages || []),
+    ];
+    const relevant = messages.filter(
+      (message) =>
+        message.message_type === MessageType.Normal &&
+        !(message as Message & { meta_data?: { isReopen?: boolean } }).meta_data?.isReopen,
+    );
+    const latest = relevant[relevant.length - 1];
 
-    const eventMessages = this.getMessagesFromProductEventData(productEventData);
-    for (let index = eventMessages.length - 1; index >= 0; index -= 1) {
-      const message = eventMessages[index];
-      if (this.isRelevantMessageTextMessage(message)) {
-        return this.getMessagePartsTextContent(message.message_parts);
-      }
-    }
-
-    return '';
-  }
-
-  public static shouldFetchUserMessageTextForConditions(productEventData: ProductEventData): boolean {
-    if (this.getConditionMessageText(productEventData)) {
-      return false;
-    }
-
-    const { actor } = productEventData;
-    return actor.type === ActorType.User || actor.sub_entity === ActorSubEntity.UserMessage;
+    return latest ? this.getMessagePartsTextContent(latest.message_parts) : '';
   }
 
   public static async fetchLatestUserMessageText(
@@ -237,16 +184,13 @@ export class Utils {
     integrations: Integrations,
     ruleAlias: string,
   ): Promise<string> {
-    const modelProperties = productEventData.conversation || productEventData.message;
-    const conversationId = modelProperties?.conversation_id;
+    const conversationId = (productEventData.conversation || productEventData.message)?.conversation_id;
 
     if (!conversationId) {
       return '';
     }
 
-    const freshchatApiUrl = integrations.freshchatv2.url;
-    const freshchatApiToken = integrations.freshchatv2.token;
-    const freshchat = new Freshchat(freshchatApiUrl, freshchatApiToken, ruleAlias);
+    const freshchat = new Freshchat(integrations.freshchatv2.url, integrations.freshchatv2.token, ruleAlias);
 
     try {
       const messages = await freshchat.getConversationMessages(conversationId);
@@ -268,98 +212,21 @@ export class Utils {
     return '';
   }
 
-  public static async resolveConditionMessageText(
-    productEventData: ProductEventData,
-    integrations: Integrations,
-    ruleAlias: string,
-  ): Promise<string> {
-    return (await this.resolveConditionMessageTextResult(productEventData, integrations, ruleAlias)).text;
-  }
-
   /**
-   * Resolves the MESSAGE_TEXT value and reports whether it was resolved from an actual user message.
-   *
-   * `resolved` is true only when a real user message (inline or fetched) was found. It is false when
-   * the only message available is a system/reopen status line and no user message could be recovered.
-   * Callers evaluating "absence" operators (DOES_NOT_CONTAIN / CONTAINS_NONE_OF) must treat an
-   * unresolved result as fail-closed so a reopen event cannot satisfy the exclusion by virtue of an
-   * empty string.
+   * Resolves the MESSAGE_TEXT value from the payload, falling back to the latest user message from the
+   * Freshchat API when the payload has none (reopen events, timer executions). `resolved` is false when no
+   * real user message could be found, so absence operators can fail closed instead of matching ''.
    */
   public static async resolveConditionMessageTextResult(
     productEventData: ProductEventData,
     integrations: Integrations,
     ruleAlias: string,
   ): Promise<{ resolved: boolean; text: string }> {
-    const inlineText = this.getConditionMessageText(productEventData);
-    if (inlineText) {
-      return { resolved: true, text: inlineText };
-    }
+    const text =
+      this.getConditionMessageText(productEventData) ||
+      (await this.fetchLatestUserMessageText(productEventData, integrations, ruleAlias));
 
-    // No usable inline text. This happens on reopen/system events where the inline payload only
-    // carries the reopen status message. Try to recover the real user message from the API.
-    if (this.shouldFetchUserMessageTextForConditions(productEventData)) {
-      const fetchedText = await this.fetchLatestUserMessageText(productEventData, integrations, ruleAlias);
-      if (fetchedText) {
-        return { resolved: true, text: fetchedText };
-      }
-      // User-origin event but no user message could be recovered (fetch failed or returned none).
-      return { resolved: false, text: '' };
-    }
-
-    // Not a user-origin event and no relevant inline message: the MESSAGE_TEXT context is unresolved.
-    return { resolved: false, text: '' };
-  }
-
-  public static async enrichProductEventPayloadWithLatestUserMessage(
-    payload: ProductEventPayload,
-    integrations: Integrations,
-    ruleAlias: string,
-  ): Promise<ProductEventPayload> {
-    const userMessageText = await this.fetchLatestUserMessageText(payload.data, integrations, ruleAlias);
-    if (!userMessageText) {
-      return payload;
-    }
-
-    const modelProperties = payload.data.conversation || payload.data.message;
-    if (!modelProperties) {
-      return payload;
-    }
-
-    const enrichedUserMessage: Message = {
-      actor_id: payload.data.actor.id,
-      actor_type: ActorType.User,
-      app_id: modelProperties.app_id,
-      channel_id: modelProperties.channel_id,
-      conversation_id: modelProperties.conversation_id,
-      created_time: new Date().toISOString(),
-      id: payload.data.message?.messages?.[0]?.id || modelProperties.messages?.[0]?.id || 'user-message-for-condition',
-      interaction_id: '',
-      is_agent_first_response: false,
-      is_agent_interim_first_response: false,
-      is_first_message: false,
-      message_parts: [{ text: { content: userMessageText } }],
-      message_type: MessageType.Normal,
-      org_actor_id: null,
-      org_contact_id: null,
-      reply_parts: [],
-    };
-
-    // Build the `message` model for the enriched payload. Prefer the existing `message` model shape
-    // when present (onMessageCreate); otherwise fall back to the conversation/message model
-    // properties so the required ModelProperties fields are populated. Only `messages` is overridden
-    // so downstream MESSAGE_TEXT re-evaluation reads the real user message.
-    const baseMessageModel = payload.data.message || modelProperties;
-
-    return {
-      ...payload,
-      data: {
-        ...payload.data,
-        message: {
-          ...baseMessageModel,
-          messages: [enrichedUserMessage],
-        },
-      },
-    };
+    return { resolved: !!text, text };
   }
 
   /**
