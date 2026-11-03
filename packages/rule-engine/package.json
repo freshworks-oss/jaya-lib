@@ -1,6 +1,6 @@
 {
   "name": "@freshworks-jaya/rule-engine",
-  "version": "0.18.10",
+  "version": "0.18.9",
   "description": "Provides methods to process rules in product events in marketplace app",
   "repository": "git@github.com:freshdesk/jaya-lib.git",
   "main": "lib/index.js",

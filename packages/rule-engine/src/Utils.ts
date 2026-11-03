@@ -10,7 +10,6 @@ import {
   findAndReplacePlaceholders,
 } from '@freshworks-jaya/utilities';
 import {
-  ActorType,
   Message,
   MessagePart,
   MessageType,
@@ -18,7 +17,6 @@ import {
   ProductEventData,
   ProductEventPayload,
 } from '@freshworks-jaya/marketplace-models';
-import Freshchat from '@freshworks-jaya/freshchat-api';
 import Handlebars from 'handlebars';
 import { htmlToText } from 'html-to-text';
 import dayjs from 'dayjs';
@@ -177,56 +175,6 @@ export class Utils {
     const latest = relevant[relevant.length - 1];
 
     return latest ? this.getMessagePartsTextContent(latest.message_parts) : '';
-  }
-
-  public static async fetchLatestUserMessageText(
-    productEventData: ProductEventData,
-    integrations: Integrations,
-    ruleAlias: string,
-  ): Promise<string> {
-    const conversationId = (productEventData.conversation || productEventData.message)?.conversation_id;
-
-    if (!conversationId) {
-      return '';
-    }
-
-    const freshchat = new Freshchat(integrations.freshchatv2.url, integrations.freshchatv2.token, ruleAlias);
-
-    try {
-      const messages = await freshchat.getConversationMessages(conversationId);
-      for (let index = messages.length - 1; index >= 0; index -= 1) {
-        const message = messages[index];
-        if (message.actor_type === ActorType.User && message.message_type === MessageType.Normal) {
-          return this.getMessagePartsTextContent(message.message_parts as MessagePart[]);
-        }
-      }
-    } catch (err) {
-      this.log(
-        { data: productEventData } as ProductEventPayload,
-        integrations,
-        ErrorCodes.FreshchatPlaceholder,
-        { error: err as AnyJson, errorType: 'FETCH_USER_MESSAGE_FOR_CONDITION' },
-      );
-    }
-
-    return '';
-  }
-
-  /**
-   * Resolves the MESSAGE_TEXT value from the payload, falling back to the latest user message from the
-   * Freshchat API when the payload has none (reopen events, timer executions). `resolved` is false when no
-   * real user message could be found, so absence operators can fail closed instead of matching ''.
-   */
-  public static async resolveConditionMessageTextResult(
-    productEventData: ProductEventData,
-    integrations: Integrations,
-    ruleAlias: string,
-  ): Promise<{ resolved: boolean; text: string }> {
-    const text =
-      this.getConditionMessageText(productEventData) ||
-      (await this.fetchLatestUserMessageText(productEventData, integrations, ruleAlias));
-
-    return { resolved: !!text, text };
   }
 
   /**
