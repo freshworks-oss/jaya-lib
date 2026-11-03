@@ -1,4 +1,4 @@
-import { RequestProxy, RequestProxyOptions, RequestProxyResponse } from './Request';
+import { RequestProxy, RequestProxyOptions } from './Request';
 import { AxiosResponse } from 'axios';
 
 export enum Method {
@@ -9,37 +9,18 @@ export enum Method {
   Put = 'put',
 }
 
-interface ParsedLocation {
-  hash: string;
-  host: string;
-  hostname: string;
-  href: string;
-  pathname: string;
-  port: string;
-  protocol: string;
-  search: string;
-}
-
-interface TemplateRequestProxy {
-  invokeTemplate(templateName: string, options: Record<string, unknown>): Promise<RequestProxyResponse>;
-}
-
-type TemplateRequestOptions = { headers?: { Authorization?: string } } & Record<string, unknown>;
-
-function getLocation(href: string): ParsedLocation | null {
-  const match = href.match(/^(https?:)\/\/(([^:/?#]*)(?::([0-9]+))?)([/]{0,1}[^?#]*)(\?[^#]*|)(#.*|)$/);
-  return (
-    match && {
-      hash: match[7],
+function getLocation(href:string) : any {
+  var match = href.match(/^(https?\:)\/\/(([^:\/?#]*)(?:\:([0-9]+))?)([\/]{0,1}[^?#]*)(\?[^#]*|)(#.*|)$/);
+  return match && {
+      href: href,
+      protocol: match[1],
       host: match[2],
       hostname: match[3],
-      href,
-      pathname: match[5],
       port: match[4],
-      protocol: match[1],
+      pathname: match[5],
       search: match[6],
-    }
-  );
+      hash: match[7]
+  }
 }
 
 const safelyParseJson = <T = unknown>(string: string): T => {
@@ -51,26 +32,19 @@ const safelyParseJson = <T = unknown>(string: string): T => {
 };
 
 const requestProxyFunc = async <T = unknown>(
-  proxy: RequestProxy,
+  requestProxy: any,
   method: Method,
   url: string,
-  requestOptions: RequestProxyOptions,
+  options: any,
 ): Promise<AxiosResponse<T>> => {
-  const requestProxy = proxy as unknown as TemplateRequestProxy;
-  const options = requestOptions as unknown as TemplateRequestOptions;
-
   try {
-    const urlObj = getLocation(url);
-
-    if (!urlObj) {
-      throw new Error(`Invalid URL: ${url}`);
-    }
+    let urlObj = getLocation(url);
 
     const data = await requestProxy.invokeTemplate(`${method.toLowerCase()}BaseTemplate`, {
       context: {
-        auth: options.headers?.Authorization,
         host: urlObj.hostname,
         path: urlObj.pathname + urlObj.search,
+        auth: options.headers?.Authorization,
       },
       ...options,
     });
@@ -79,7 +53,7 @@ const requestProxyFunc = async <T = unknown>(
       data: safelyParseJson<T>(data.response),
       headers: data.headers,
       status: data.status,
-    } as unknown as AxiosResponse;
+    } as unknown as AxiosResponse;  
   } catch (error) {
     // Consider logging the error or handling it as needed
     throw error;
