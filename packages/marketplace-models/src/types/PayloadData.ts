@@ -117,6 +117,7 @@ export interface User {
   phone?: string;
   properties?: UserProperty[];
   reference_id?: string;
+  system_properties?: UserProperty[];
   updated_time?: string;
 }
 
