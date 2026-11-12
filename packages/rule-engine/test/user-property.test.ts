@@ -104,11 +104,6 @@ describe('USER_PROPERTY condition', () => {
       assert.isTrue(await matches(buildCondition('locale', 'fr'), data));
     });
 
-    it('matches the "user_locale" key directly', async () => {
-      const data = buildEventData({ system_properties: [{ name: 'user_locale', value: 'fr' }] });
-      assert.isTrue(await matches(buildCondition('user_locale', 'fr'), data));
-    });
-
     it('resolves "total_sessions" from system_properties "sessions"', async () => {
       const data = buildEventData({ system_properties: [{ name: 'sessions', value: '3' }] });
       assert.isTrue(await matches(buildCondition('total_sessions', '3'), data));

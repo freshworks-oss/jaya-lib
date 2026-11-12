@@ -117,9 +117,6 @@ export interface User {
   phone?: string;
   properties?: UserProperty[];
   reference_id?: string;
-  // Built-in/system fields (e.g. locale, sent as "user_locale") live here, separate from
-  // admin-defined custom fields in `properties`. See user-property.ts condition evaluator,
-  // which checks both.
   system_properties?: UserProperty[];
   updated_time?: string;
 }
