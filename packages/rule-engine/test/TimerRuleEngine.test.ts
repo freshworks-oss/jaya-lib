@@ -831,8 +831,8 @@ describe('TimerRuleEngine test', () => {
       sandbox.stub(Kairos.prototype, 'bulkDeleteSchedules').resolves();
 
       await TimerRuleEngine.invalidateTimers(
-        productEventPayload as ProductEventPayload,
-        [ruleWithInvalidatorsNotMatching] as Rule[],
+        productEventPayload as any as ProductEventPayload,
+        [ruleWithInvalidatorsNotMatching] as any as Rule[],
         'external event url',
         { token: 't', url: 'u', group: 'g' },
         baseIntegrations,
@@ -847,8 +847,8 @@ describe('TimerRuleEngine test', () => {
       sandbox.stub(Kairos.prototype, 'bulkDeleteSchedules').resolves();
 
       await TimerRuleEngine.invalidateTimers(
-        productEventPayload as ProductEventPayload,
-        [ruleWithInvalidatorsMatching] as Rule[],
+        productEventPayload as any as ProductEventPayload,
+        [ruleWithInvalidatorsMatching] as any as Rule[],
         'external event url',
         { token: 't', url: 'u', group: 'g' },
         baseIntegrations,
@@ -895,8 +895,8 @@ describe('TimerRuleEngine test', () => {
             actor: { ...productEventPayload.data.actor, type: 'agent' },
           },
           event: 'onMessageCreate',
-        } as ProductEventPayload,
-        [matchingRule] as Rule[],
+        } as any as ProductEventPayload,
+        [matchingRule] as any as Rule[],
         'external event url',
         { group: 'g', url: 'u', token: 't' },
         baseIntegrations,
