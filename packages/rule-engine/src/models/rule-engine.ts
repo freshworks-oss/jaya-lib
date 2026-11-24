@@ -18,6 +18,7 @@ export interface Integrations {
     apiKey: string;
     url: string;
   };
+  featureFlags: Record<string, boolean>;
   freshchatv1: ProductCredentials;
   freshchatv2: ProductCredentials;
   freshdesk?: ProductCredentials;
@@ -26,7 +27,6 @@ export interface Integrations {
     requestProxy: RequestProxy;
   };
   timezoneOffset: number;
-  featureFlags: Record<string, boolean>;
 }
 
 export interface ProductCredentials {
@@ -57,7 +57,3 @@ export interface KairosCredentials {
   token: string;
   url: string;
 }
-
-
-
-

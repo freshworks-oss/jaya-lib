@@ -1,6 +1,7 @@
 import { Event, ProductEventData } from '@freshworks-jaya/marketplace-models';
 import { TriggerAction } from '../../models/rule';
 
+// eslint-disable-next-line complexity
 export default (productEvent: Event, productEventData: ProductEventData, triggerAction: TriggerAction): boolean => {
   const { actor, changes } = productEventData;
   const { model_changes } = changes || {};

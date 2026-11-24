@@ -47,31 +47,39 @@ export class RuleEngine {
     integrations: Integrations,
     kairosCredentials?: KairosCredentials,
   ): Promise<void> {
-    const eventStart = Date.now();
-    console.log({ s: 'EventReceived', ts: eventStart });
     if (options.isSchedulerEnabled && kairosCredentials) {
       // Invalidate existing schedules and process all timer rules.
-      console.log({ s: 'ScheduleInvalidationStart', ts: Date.now() });
       await TimerRuleEngine.invalidateTimers(payload, rules, externalEventUrl, kairosCredentials, integrations);
-      console.log({ s: 'ScheduleCreationStart', ts: Date.now() });
       await TimerRuleEngine.triggerTimers(payload, rules, externalEventUrl, kairosCredentials, integrations, options);
     }
 
     // Process regular rules and get the actions of the first matching rule.
     try {
-      console.log({ s: 'CheckFirstMatchingRuleStart', ts: Date.now() });
-      const firstMatchingRule = await RuleProcessor.getFirstMatchingRule(payload.event, payload.data, rules, integrations, options);
+      const firstMatchingRule = await RuleProcessor.getFirstMatchingRule(
+        payload.event,
+        payload.data,
+        rules,
+        integrations,
+        options,
+      );
       if (firstMatchingRule?.actions?.length) {
         const ruleAlias = firstMatchingRule.ruleAlias || '';
-        await ActionExecutor.handleActions(integrations, firstMatchingRule.actions, payload, apis, customPlaceholders, options, ruleAlias);
+        await ActionExecutor.handleActions(
+          integrations,
+          firstMatchingRule.actions,
+          payload,
+          apis,
+          customPlaceholders,
+          options,
+          ruleAlias,
+        );
       }
     } catch (err) {
       if (options.enableLogger) {
-        Utils.log(payload, integrations, ErrorCodes.FreshchatAction, { error: err as AnyJson}, LogSeverity.ALERT);
+        Utils.log(payload, integrations, ErrorCodes.FreshchatAction, { error: err as AnyJson }, LogSeverity.ALERT);
       }
       throw err; // Rethrow the error to be handled by the caller.
     }
-        console.log({ s: 'EventProcessingEnd', ts: Date.now(), d: Date.now() - eventStart });
   }
 
   async processExternalEvent(

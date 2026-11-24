@@ -139,7 +139,7 @@ const getRequestConfig = (
 
   // Step 4: Handle contentType
   if (triggerWebhookValue.contentType) {
-    const {headers, data} = handleContentTypeHeader(axiosRequestConfig, triggerWebhookValue, combinedPlaceholders);
+    const { headers, data } = handleContentTypeHeader(axiosRequestConfig, triggerWebhookValue, combinedPlaceholders);
 
     axiosRequestConfig.headers = headers;
 
@@ -160,7 +160,7 @@ const handleContentTypeHeader = (
     contentType: WebhookContentType = triggerWebhookValue.contentType as WebhookContentType;
   let data = null;
 
-  if(!headers['Content-Type']) {
+  if (!headers['Content-Type']) {
     headers['Content-Type'] = contentTypeMap[contentType];
   }
 
@@ -217,7 +217,7 @@ export default async (
     throw new Error('Api not found');
   }
 
-  let combinedPlaceholders: PlaceholdersMap = await generatePlaceholders(
+  const combinedPlaceholders: PlaceholdersMap = await generatePlaceholders(
     triggerApi.config,
     productEventPayload,
     integrations,
@@ -235,7 +235,7 @@ export default async (
     Utils.log(productEventPayload, integrations, ErrorCodes.APIConfigError, {
       apiName: triggerApi.name,
       config: axiosRequestConfig as unknown as AnyJson,
-      error: e as AnyJson
+      error: e as AnyJson,
     });
     throw e; // re-throw the error after logging
   }
@@ -251,20 +251,27 @@ export default async (
       triggerApi,
       dateBeforeTrigger,
       dateAfterTrigger,
-      axiosRequestConfig.headers
+      axiosRequestConfig.headers,
     );
-  
+
     return { [triggerApi.responseModelName]: webhookResponse.data };
   } catch (error) {
-    Utils.log(productEventPayload, integrations, ErrorCodes.TriggerAPITrace, {
-      apiName: triggerApi.name,
-      error: error as AnyJson,
-    }, LogSeverity.CRITICAL);
-    throw error
+    Utils.log(
+      productEventPayload,
+      integrations,
+      ErrorCodes.TriggerAPITrace,
+      {
+        apiName: triggerApi.name,
+        error: error as AnyJson,
+      },
+      LogSeverity.CRITICAL,
+    );
+    throw error;
   }
 };
 
 async function generatePlaceholders(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config: any,
   productEventPayload: ProductEventPayload,
   integrations: Integrations,
@@ -289,10 +296,12 @@ async function generatePlaceholders(
 }
 
 async function makeApiCall(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   axiosRequestConfig: any,
   triggerApi: Api,
   integrations: Integrations,
-  productEventPayload: ProductEventPayload
+  productEventPayload: ProductEventPayload,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any> {
   try {
     return await requestAxiosWrapper<JsonMap>(axiosRequestConfig, {
@@ -314,7 +323,7 @@ function logApiResponseTime(
   triggerApi: Api,
   dateBeforeTrigger: Date,
   dateAfterTrigger: Date,
-  headers: Headers
+  headers: Headers,
 ): void {
   const apiResponseTimeInMilliseconds = dateAfterTrigger.getTime() - dateBeforeTrigger.getTime();
 

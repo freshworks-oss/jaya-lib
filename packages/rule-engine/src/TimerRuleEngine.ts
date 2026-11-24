@@ -1,13 +1,7 @@
 import Kairos, { KairosSchedule, KairosScheduleOptions } from '@freshworks-jaya/kairos-api';
 import { Event, ProductEventPayload, ProductEventData, ModelProperties } from '@freshworks-jaya/marketplace-models';
 import { ActionExecutor } from './ActionExecutor';
-import {
-  AnyJson,
-  Api,
-  CustomPlaceholdersMap,
-  JsonMap,
-  Rule
-} from './models/rule';
+import { AnyJson, Api, CustomPlaceholdersMap, JsonMap, Rule } from './models/rule';
 import { RuleProcessor } from './RuleProcessor';
 import {
   KairosCredentials,
@@ -76,6 +70,7 @@ export class TimerRuleEngine {
   /**
    * Trigger creation of timers for incoming event.
    */
+  // eslint-disable-next-line complexity
   public static async triggerTimers(
     payload: ProductEventPayload,
     rules: Rule[],
@@ -84,7 +79,6 @@ export class TimerRuleEngine {
     integrations: Integrations,
     options: RuleEngineOptions,
   ): Promise<void> {
-    console.log({ s: 'ScheduleCheckStart', ts: Date.now() });
     let schedulesToCreate: KairosScheduleOptions[] = [];
     const scheduler = new Kairos(kairosCredentials);
 
@@ -108,7 +102,7 @@ export class TimerRuleEngine {
         try {
           existingSchedule = (await scheduler.fetchSchedule(jobId)) as KairosSchedule;
         } catch (err) {
-          console.log({ s: 'ScheduleCheckError', ts: Date.now() });
+          // Schedule lookup failed; treat as no existing schedule and continue arming.
         }
 
         if (existingSchedule) {
@@ -269,14 +263,14 @@ export class TimerRuleEngine {
       timerRule = rules[externalEventPayload.data.ruleIndex];
     }
 
-
     let originalPayload = {} as ProductEventPayload;
 
     // Decode and parse the originalPayload. Handle the case where the originalPayload is object,
     // but app update has happened before schedule execution.
-    const encodedData = typeof externalEventPayload.data.originalPayload === 'string'
-      ? externalEventPayload.data.originalPayload
-      : externalEventPayload.data.originalPayload?.encodedData;
+    const encodedData =
+      typeof externalEventPayload.data.originalPayload === 'string'
+        ? externalEventPayload.data.originalPayload
+        : externalEventPayload.data.originalPayload?.encodedData;
 
     if (encodedData) {
       const data = Buffer.from(encodedData, 'base64').toString();
@@ -397,9 +391,7 @@ export class TimerRuleEngine {
 
     if (jobsToDelete && jobsToDelete.length) {
       const scheduler = new Kairos(kairosCredentials);
-      if (
-        RuleProcessor.isTriggerConditionMatching(payload.event, payload.data, assignmentConditions)
-      ) {
+      if (RuleProcessor.isTriggerConditionMatching(payload.event, payload.data, assignmentConditions)) {
         // Current event is IntelliAssign assigns an Agent, or assignment rule assigns an Agent or group schedule to cancel it after 3 seconds
         const createScheduleJobId = `${modelProperties.app_id}_${modelProperties.conversation_id}_delay_invalidation`;
         const scheduledTime = this.addSeconds(new Date(), 3).toISOString();

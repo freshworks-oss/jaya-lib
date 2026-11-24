@@ -9,7 +9,7 @@ import { LogSeverity } from '../../services/GoogleCloudLogging';
 
 type PropertiesConditionPayload = PropertiesConditionValue[] | PropertiesConditionValue;
 
-let getConditionPayload = (payload: PropertiesConditionPayload) => {
+const getConditionPayload = (payload: PropertiesConditionPayload) => {
   return Array.isArray(payload) ? payload : [payload];
 };
 
@@ -29,7 +29,10 @@ export default async (
   const userPropertiesActionValue = getConditionPayload(actionValue as PropertiesConditionPayload);
   let generatedPlaceholders: PlaceholdersMap = {};
 
-  let getPropertiesPayload = (propertiesPayload: PropertiesConditionValue[], combinedPlaceholders: PlaceholdersMap) => {
+  const getPropertiesPayload = (
+    propertiesPayload: PropertiesConditionValue[],
+    combinedPlaceholders: PlaceholdersMap,
+  ) => {
     return propertiesPayload.map((property: PropertiesConditionValue) => {
       return {
         name: property.propertyKey,

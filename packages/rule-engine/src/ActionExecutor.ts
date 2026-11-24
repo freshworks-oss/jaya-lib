@@ -183,7 +183,6 @@ export class ActionExecutor {
     const convFieldsMap = new Map<string, string>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const choicesMap = new Map<string, any>();
-    console.log({ s: 'FetchConversationPropertiesStart', ts: Date.now() });
     const { data: conversationFieldsResponse, error } = await freshchat.getConversationPropertyFields();
     if (error) {
       Utils.log(
@@ -200,11 +199,9 @@ export class ActionExecutor {
 
     placeholders = { ...placeholders, ...customPlaceholders };
 
-    console.log({ s: 'ActionLoopStart', ts: Date.now() });
     for (let i = 0; actions && i < actions.length; i += 1) {
       try {
         const action = actions[i];
-        console.log({ s: `ActionStart_${action.type}`, ts: Date.now() });
         const placeholdersFromAction = await this.handleAction(
           integrations,
           action,

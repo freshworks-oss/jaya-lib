@@ -125,6 +125,7 @@ describe('TimerRuleEngine test', () => {
     beforeEach(() => {
       sandbox = sinon.createSandbox();
       ruleConfig.registerPlugins(recommendedPlugins);
+      sandbox.stub(Utils, 'log').resolves();
     });
 
     afterEach(() => {
@@ -345,10 +346,10 @@ describe('TimerRuleEngine test', () => {
       assert.isFalse(spy.called);
     });
 
-    it('should delete schedules when invalidators are matching', () => {
-      const stub = sandbox.stub(Kairos.prototype, 'bulkDeleteSchedules');
+    it('should delete schedules when invalidators are matching', async () => {
+      const stub = sandbox.stub(Kairos.prototype, 'bulkDeleteSchedules').resolves();
 
-      TimerRuleEngine.invalidateTimers(
+      await TimerRuleEngine.invalidateTimers(
         productEventPayload as any as ProductEventPayload,
         [ruleWithInvalidatorsMatching] as any as Rule[],
         '',

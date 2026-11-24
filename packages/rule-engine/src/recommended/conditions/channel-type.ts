@@ -12,7 +12,7 @@ export default (
 ): Promise<void> => {
   return Utils.evaluateCondition(
     condition.operator,
-    productEventData?.conversation?.source || productEventData?.message?.source ||'',
+    productEventData?.conversation?.source || productEventData?.message?.source || '',
     condition.value as string,
     integrations,
     options,

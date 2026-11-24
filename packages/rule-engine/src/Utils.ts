@@ -97,7 +97,7 @@ export class Utils {
    *
    * @throws Will throw an error if the logging fails.
    */
-  
+
   public static async log(
     productEventPayload: ProductEventPayload,
     integrations: Integrations,
@@ -111,9 +111,9 @@ export class Utils {
       const { conversation_id: conversationId, app_id: appAlias, messages } = conversation || {};
       const messageId = messages?.[0]?.id || 0;
       const { sub_entity: actorSubentity = null, type: actorType } = data.actor;
-  
+
       const googleCloudLogging = new GoogleCloudLogging(integrations.googleCloudLoggingConfig);
-      
+
       await googleCloudLogging.log(
         {
           actor_subentity: actorSubentity,
@@ -318,7 +318,7 @@ export class Utils {
         });
     });
   };
-  
+
   public static registerEmptyPlaceholder(
     convFieldsMap: Map<string, string>,
     conversation: ModelProperties,
@@ -349,13 +349,9 @@ export class Utils {
   }
 
   /*
-  * Check if feature flag is available and enabled.
-  */
-  public static isFeatureFlagEnabled = (
-    integrations: Integrations,
-    featureFlag: string,
-  ): Boolean => {
+   * Check if feature flag is available and enabled.
+   */
+  public static isFeatureFlagEnabled = (integrations: Integrations, featureFlag: string): boolean => {
     return integrations?.featureFlags?.[featureFlag] || false;
   };
-
 }

@@ -55,7 +55,6 @@ export default async (
     } else {
       await freshchat.conversationPropertiesUpdate(conversationId, properties, status);
     }
-
   } catch (err) {
     Utils.log(
       productEventPayload,
