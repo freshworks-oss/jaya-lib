@@ -5,6 +5,7 @@ import {
   AnyJson,
   Api,
   CustomPlaceholdersMap,
+  JsonMap,
   Rule
 } from './models/rule';
 import { RuleProcessor } from './RuleProcessor';
@@ -50,6 +51,28 @@ export class TimerRuleEngine {
     return productEventData.conversation || productEventData.message;
   }
 
+  public static parseConversationIdFromJobId(jobId: string): string | undefined {
+    const firstUnderscore = jobId.indexOf('_');
+    const lastUnderscore = jobId.lastIndexOf('_');
+    if (firstUnderscore > 0 && lastUnderscore > firstUnderscore) {
+      return jobId.substring(firstUnderscore + 1, lastUnderscore);
+    }
+    return undefined;
+  }
+
+  public static conversationArmSnapshot(productEventData: ProductEventData): {
+    assigned_agent_id_at_arm: string | undefined;
+    conversation_id: string | undefined;
+    status_at_arm: string | undefined;
+  } {
+    const model = this.getModelProperties(productEventData);
+    return {
+      assigned_agent_id_at_arm: model?.assigned_agent_id ?? undefined,
+      conversation_id: model?.conversation_id,
+      status_at_arm: model?.status,
+    };
+  }
+
   /**
    * Trigger creation of timers for incoming event.
    */
@@ -87,6 +110,23 @@ export class TimerRuleEngine {
         } catch (err) {
           console.log({ s: 'ScheduleCheckError', ts: Date.now() });
         }
+
+        if (existingSchedule) {
+          await Utils.log(
+            payload,
+            integrations,
+            APITraceCodes.CREATE_SCHEDULE_SKIPPED_EXISTING,
+            {
+              conversation_id: modelProperties.conversation_id,
+              existing_scheduled_time: existingSchedule.scheduled_time,
+              job_id: jobId,
+              rule_alias: rule.ruleAlias ?? null,
+              rule_index: ruleIndex,
+            },
+            LogSeverity.NOTICE,
+          );
+        }
+
         // If there are no existing schedules, create schedule object
         // and push it into the schedules array for bulk scheduling later.
 
@@ -110,6 +150,23 @@ export class TimerRuleEngine {
 
           // encoded data is sent to make sure that translatetions are not corrupted by Kairos API
           const encodedPayload = Buffer.from(JSON.stringify(originalPayload)).toString('base64');
+
+          if (options.enableLogger) {
+            await Utils.log(
+              payload,
+              integrations,
+              APITraceCodes.CREATE_SCHEDULE_ARM_CONTEXT,
+              {
+                ...this.conversationArmSnapshot(payload.data),
+                job_id: jobId,
+                rule_alias: rule.ruleAlias ?? null,
+                rule_index: ruleIndex,
+                timer_value: rule.timerValue,
+                trigger_event: payload.event,
+              } as JsonMap,
+              LogSeverity.DEBUG,
+            );
+          }
 
           schedulesToCreate = [
             ...schedulesToCreate,
@@ -226,10 +283,24 @@ export class TimerRuleEngine {
       originalPayload = JSON.parse(data) as ProductEventPayload;
     }
 
-
     // Execute actions
     if (timerRule && Array.isArray(timerRule.actions)) {
-      return ActionExecutor.handleActions(
+      await Utils.log(
+        externalEventPayload as unknown as ProductEventPayload,
+        integrations,
+        APITraceCodes.TIMER_EXECUTE_CONTEXT,
+        {
+          ...this.conversationArmSnapshot(originalPayload.data),
+          action_types: timerRule.actions.map((action) => action.type),
+          armed_at_event: originalPayload.event,
+          job_id: externalEventPayload.data.jobId,
+          rule_alias: externalEventPayload.data.ruleAlias ?? null,
+          rule_index: externalEventPayload.data.ruleIndex,
+        } as JsonMap,
+        LogSeverity.NOTICE,
+      );
+
+      const actionResult = await ActionExecutor.handleActions(
         integrations,
         timerRule.actions,
         originalPayload,
@@ -237,6 +308,22 @@ export class TimerRuleEngine {
         customPlaceholders,
         options,
       );
+
+      if (options.enableLogger) {
+        await Utils.log(
+          externalEventPayload as unknown as ProductEventPayload,
+          integrations,
+          APITraceCodes.TIMER_EXECUTE_COMPLETED,
+          {
+            job_id: externalEventPayload.data.jobId,
+            rule_alias: externalEventPayload.data.ruleAlias ?? null,
+            rule_index: externalEventPayload.data.ruleIndex,
+          },
+          LogSeverity.DEBUG,
+        );
+      }
+
+      return actionResult;
     }
   }
 
@@ -251,6 +338,22 @@ export class TimerRuleEngine {
     integrations: Integrations,
   ): Promise<void> {
     const modelProperties = payload.data.conversation || payload.data.message;
+    const enabledTimerRulesWithInvalidators = rules.filter(
+      (rule) => rule.isEnabled && rule.isTimer && rule.invalidators,
+    );
+
+    await Utils.log(
+      payload,
+      integrations,
+      APITraceCodes.INVALIDATE_TIMER_ATTEMPT,
+      {
+        conversation_id: modelProperties.conversation_id,
+        enabled_timer_rules_with_invalidators: enabledTimerRulesWithInvalidators.length,
+        event: payload.event,
+        status: modelProperties.status,
+      },
+      LogSeverity.DEBUG,
+    );
 
     const jobsToDelete = rules.reduce((jobIds: string[], rule, ruleIndex) => {
       let isMatch = false;
@@ -261,10 +364,36 @@ export class TimerRuleEngine {
 
       if (isMatch) {
         const ruleIdentifier = rule.ruleAlias ? rule.ruleAlias : ruleIndex;
-        jobIds.push(`${modelProperties.app_id}_${modelProperties.conversation_id}_${ruleIdentifier}`);
+        const jobId = `${modelProperties.app_id}_${modelProperties.conversation_id}_${ruleIdentifier}`;
+        jobIds.push(jobId);
+        void Utils.log(
+          payload,
+          integrations,
+          APITraceCodes.INVALIDATE_RULE_MATCHED,
+          {
+            conversation_id: modelProperties.conversation_id,
+            job_id: jobId,
+            rule_alias: rule.ruleAlias ?? null,
+            rule_index: ruleIndex,
+          },
+          LogSeverity.NOTICE,
+        );
       }
       return jobIds;
     }, []);
+
+    if (enabledTimerRulesWithInvalidators.length > 0 && jobsToDelete.length === 0) {
+      await Utils.log(
+        payload,
+        integrations,
+        APITraceCodes.INVALIDATE_NONE_MATCHED,
+        {
+          conversation_id: modelProperties.conversation_id,
+          event: payload.event,
+        },
+        LogSeverity.NOTICE,
+      );
+    }
 
     if (jobsToDelete && jobsToDelete.length) {
       const scheduler = new Kairos(kairosCredentials);
@@ -294,8 +423,9 @@ export class TimerRuleEngine {
                 integrations,
                 APITraceCodes.DELAY_SCHEDULE_CREATION,
                 {
+                  cancellation_path: 'delayed_3s',
                   createScheduleJobId,
-                  jobId: jobsToDelete,
+                  job_id: jobsToDelete,
                 },
                 LogSeverity.NOTICE,
               );
@@ -326,7 +456,8 @@ export class TimerRuleEngine {
               integrations,
               APITraceCodes.INVALIDATE_SCHEDULE_SUCCESS,
               {
-                jobId: jobsToDelete,
+                cancellation_path: 'immediate',
+                job_id: jobsToDelete,
               },
               LogSeverity.NOTICE,
             );
