@@ -1,12 +1,13 @@
-# Publish `@freshworks-jaya/rule-engine@0.18.10-beta-1`
+# Publish `@freshworks-jaya/rule-engine@0.18.10-beta.4` (CX-332784 RCA)
 
-Prepared on branch `CX-332784/timer-invalidation-rca-logs` (commit `628fd25`).
+Uses npm dot prerelease style (`0.18.10-beta.3` is current `@beta` on registry).
 
 ```bash
 cd packages/rule-engine
+yarn build
 npm login
 npm publish --tag beta
 npm view @freshworks-jaya/rule-engine@beta version
 ```
 
-Pre-built tarball (offline fallback): `freshworks-jaya-rule-engine-0.18.10-beta-1.tgz` in this directory.
+Pre-built tarball (offline): `freshworks-jaya-rule-engine-0.18.10-beta.4.tgz` in this directory after `npm pack`.
