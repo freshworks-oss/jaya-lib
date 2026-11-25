@@ -1,5 +1,3 @@
 tsconfig.json
 src
 test
-*.tgz
-PUBLISH_BETA.md
