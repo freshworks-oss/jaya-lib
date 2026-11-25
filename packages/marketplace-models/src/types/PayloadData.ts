@@ -29,7 +29,6 @@ export enum ActorType {
 
 export enum ConversationSource {
   AppleBusinessChat = 'ABC',
-  Email = 'EMAIL',
   FacebookMessenger = 'FACEBOOK_MESSENGER',
   FacebookNative = 'FB_NATIVE',
   FreshbotsWidget = 'FRESHBOTS_WIDGET',
@@ -38,6 +37,7 @@ export enum ConversationSource {
   MobileSDK = 'MOBILE',
   WebMessenger = 'WEBCHAT',
   WhatsApp = 'WHATSAPP',
+  Email = 'EMAIL',
 }
 
 export enum MessageSource {
