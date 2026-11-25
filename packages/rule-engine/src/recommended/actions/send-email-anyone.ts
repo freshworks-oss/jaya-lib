@@ -1,6 +1,6 @@
 import { ProductEventPayload } from '@freshworks-jaya/marketplace-models';
 import { Integrations, RuleEngineOptions } from '../../models/rule-engine';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { AnyJson, Api, SendEmailAnyoneValue } from '../../models/rule';
 import { Utils } from '../../Utils';
 import { PlaceholdersMap } from '@freshworks-jaya/utilities';
@@ -41,11 +41,21 @@ export default async (
     const combinedPlaceholders = { ...placeholders, ...generatedPlaceholders };
 
     // Step 2: Replace placeholders in subject and body
-    const emailTo = sendEmailAnyoneValue.to.map((email) => {
-      return {
-        email: Utils.processHandlebarsAndReplacePlaceholders(email, combinedPlaceholders),
-      };
-    });
+    const emailTo = (sendEmailAnyoneValue.to || [])
+      .map((email) => {
+        return {
+          email: Utils.processHandlebarsAndReplacePlaceholders(email, combinedPlaceholders),
+        };
+      })
+      .filter((recipient) => recipient.email && recipient.email.trim());
+
+    if (!emailTo.length) {
+      Utils.log(productEventPayload, integrations, ErrorCodes.SendEmail, {
+        error: 'emailTo is null or empty',
+        to: sendEmailAnyoneValue.to as AnyJson,
+      });
+      return Promise.reject('emailTo is null or empty');
+    }
 
     // Replace end-of-line characters with <br>
     sendEmailAnyoneValue.body = sendEmailAnyoneValue.body.replace(/(?:\r\n|\r|\n)/g, '<br>');
@@ -87,8 +97,11 @@ export default async (
       LogSeverity.INFO,
     );
   } catch (err) {
+    const axiosError = err as AxiosError;
     Utils.log(productEventPayload, integrations, ErrorCodes.SendEmail, {
-      error: err as AnyJson,
+      error: axiosError.message,
+      response: (axiosError.response?.data ?? null) as AnyJson,
+      status: axiosError.response?.status ?? null,
     });
     return Promise.reject('Failed to setup dynamic placeholders');
   }

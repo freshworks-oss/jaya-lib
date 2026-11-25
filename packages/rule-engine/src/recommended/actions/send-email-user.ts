@@ -1,7 +1,7 @@
 import { ProductEventPayload } from '@freshworks-jaya/marketplace-models';
 import { Integrations, RuleEngineOptions } from '../../models/rule-engine';
 import Freshchat from '@freshworks-jaya/freshchat-api';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { PlaceholdersMap } from '@freshworks-jaya/utilities';
 import { AnyJson, Api } from '../../models/rule';
 import { Utils } from '../../Utils';
@@ -30,6 +30,9 @@ export default async (
     productEventPayload.data.associations.user.email;
 
   if (!userEmail) {
+    Utils.log(productEventPayload, integrations, ErrorCodes.SendEmail, {
+      error: 'emailTo is null or empty',
+    });
     return Promise.reject('No user email to send');
   }
 
@@ -88,8 +91,11 @@ export default async (
       LogSeverity.INFO,
     );
   } catch (err) {
+    const axiosError = err as AxiosError;
     Utils.log(productEventPayload, integrations, ErrorCodes.SendEmail, {
-      error: err as AnyJson,
+      error: axiosError.message,
+      response: (axiosError.response?.data ?? null) as AnyJson,
+      status: axiosError.response?.status ?? null,
     });
     return Promise.reject('Error sending conversation as html via email');
   }
