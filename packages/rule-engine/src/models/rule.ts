@@ -66,6 +66,7 @@ export enum ConditionKey {
   CallStatus = 'CALL_STATUS',
   CallType = 'CALL_TYPE',
   Channel = 'CHANNEL',
+  ChannelType = 'CHANNEL_TYPE',
   ConversationProperty = 'CONVERSATION_PROPERTY',
   EmailBody = 'EMAIL_BODY',
   LabelCategoryName = 'LABEL_CATEGORY_NAME',
@@ -79,7 +80,6 @@ export enum ConditionKey {
   UserName = 'USER_NAME',
   UserPhone = 'USER_PHONE',
   UserProperty = 'USER_PROPERTY',
-  ChannelType = 'CHANNEL_TYPE'
 }
 export enum ConditionOperator {
   After = 'AFTER',

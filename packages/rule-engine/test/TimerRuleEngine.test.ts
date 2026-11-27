@@ -12,6 +12,8 @@ import { ActionExecutor } from '../src/ActionExecutor';
 import { AxiosPromise } from 'axios';
 import { Integrations } from '../src/models/rule-engine';
 import { RequestProxy } from '@freshworks-jaya/marketplace-models';
+import { Utils } from '../src/Utils';
+import { APITraceCodes } from '../src/models/error-codes';
 
 describe('TimerRuleEngine test', () => {
   const productEventPayload = {
@@ -123,6 +125,7 @@ describe('TimerRuleEngine test', () => {
     beforeEach(() => {
       sandbox = sinon.createSandbox();
       ruleConfig.registerPlugins(recommendedPlugins);
+      sandbox.stub(Utils, 'log').resolves();
     });
 
     afterEach(() => {
@@ -343,10 +346,10 @@ describe('TimerRuleEngine test', () => {
       assert.isFalse(spy.called);
     });
 
-    it('should delete schedules when invalidators are matching', () => {
-      const stub = sandbox.stub(Kairos.prototype, 'bulkDeleteSchedules');
+    it('should delete schedules when invalidators are matching', async () => {
+      const stub = sandbox.stub(Kairos.prototype, 'bulkDeleteSchedules').resolves();
 
-      TimerRuleEngine.invalidateTimers(
+      await TimerRuleEngine.invalidateTimers(
         productEventPayload as any as ProductEventPayload,
         [ruleWithInvalidatorsMatching] as any as Rule[],
         '',
@@ -766,6 +769,156 @@ describe('TimerRuleEngine test', () => {
       );
 
       assert.isFalse(createStub.called);
+    });
+  });
+
+  describe('timer invalidation RCA logging', () => {
+    let sandbox: SinonSandbox;
+
+    const baseIntegrations = {
+      freshchatv1: { token: 'tokenv1', url: 'urlv1' },
+      freshchatv2: { token: 'tokenv2', url: 'urlv2' },
+      googleCloudLoggingConfig: {
+        project_id: 'projectid',
+        private_key: 'privatekey',
+        client_email: 'emailaddresshere',
+        logName: 'jaya-lib',
+      },
+      marketplaceServices: {
+        requestProxy: {} as unknown as RequestProxy,
+      },
+      featureFlags: {},
+      timezoneOffset: -330,
+    } as Integrations;
+
+    const ruleWithInvalidatorsMatching = {
+      name: 'Timer rule',
+      isEnabled: true,
+      isTimer: true,
+      timerValue: 5,
+      invalidators: [
+        {
+          actor: { type: 'AGENT' },
+          action: { type: 'MESSAGE_CREATE' },
+        },
+      ],
+    };
+
+    const ruleWithInvalidatorsNotMatching = {
+      name: 'Timer rule',
+      isEnabled: true,
+      isTimer: true,
+      timerValue: 5,
+      invalidators: [
+        {
+          actor: { type: 'USER' },
+          action: { type: 'MESSAGE_CREATE' },
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      sandbox = sinon.createSandbox();
+      ruleConfig.registerPlugins(recommendedPlugins);
+      sandbox.stub(Utils, 'log').resolves();
+    });
+
+    afterEach(() => {
+      sandbox.restore();
+      ruleConfig.reset();
+    });
+
+    it('logs INVALIDATE_NONE_MATCHED when invalidators do not match', async () => {
+      sandbox.stub(Kairos.prototype, 'bulkDeleteSchedules').resolves();
+
+      await TimerRuleEngine.invalidateTimers(
+        productEventPayload as any as ProductEventPayload,
+        [ruleWithInvalidatorsNotMatching] as any as Rule[],
+        'external event url',
+        { token: 't', url: 'u', group: 'g' },
+        baseIntegrations,
+      );
+
+      const codes = (Utils.log as sinon.SinonStub).getCalls().map((call) => call.args[2]);
+      assert.include(codes, APITraceCodes.INVALIDATE_TIMER_ATTEMPT);
+      assert.include(codes, APITraceCodes.INVALIDATE_NONE_MATCHED);
+    });
+
+    it('logs INVALIDATE_RULE_MATCHED when invalidators match', async () => {
+      sandbox.stub(Kairos.prototype, 'bulkDeleteSchedules').resolves();
+
+      await TimerRuleEngine.invalidateTimers(
+        productEventPayload as any as ProductEventPayload,
+        [ruleWithInvalidatorsMatching] as any as Rule[],
+        'external event url',
+        { token: 't', url: 'u', group: 'g' },
+        baseIntegrations,
+      );
+
+      const codes = (Utils.log as sinon.SinonStub).getCalls().map((call) => call.args[2]);
+      assert.include(codes, APITraceCodes.INVALIDATE_RULE_MATCHED);
+      assert.include(codes, APITraceCodes.INVALIDATE_SCHEDULE_SUCCESS);
+    });
+
+    it('logs CREATE_SCHEDULE_SKIPPED_EXISTING when Kairos job exists', async () => {
+      sandbox.stub(Kairos.prototype, 'fetchSchedule').resolves({
+        data: { externalEventUrl: 'url' },
+        deleted: 0,
+        group: 'g',
+        job_id: 'job',
+        scheduled_time: '2020-01-01T00:00:00.000Z',
+        webhook: { url: 'url' },
+      });
+      const createStub = sandbox.stub(Kairos.prototype, 'bulkCreateSchedules').resolves();
+
+      const matchingRule = {
+        blocks: [
+          {
+            conditions: [{ operator: 'EQUALS', value: 'some-channel-id', key: 'CHANNEL' }],
+            matchType: 'ANY',
+          },
+        ],
+        name: 'When agent says hi',
+        isTimer: true,
+        actions: [{ type: 'SEND_MESSAGE', value: 'hello' }],
+        timerValue: 5,
+        triggers: [{ actor: { type: 'AGENT' }, action: { type: 'MESSAGE_CREATE' } }],
+        matchType: 'ANY',
+        invalidators: null,
+        isEnabled: true,
+      };
+
+      await TimerRuleEngine.triggerTimers(
+        {
+          ...productEventPayload,
+          data: {
+            ...productEventPayload.data,
+            actor: { ...productEventPayload.data.actor, type: 'agent' },
+          },
+          event: 'onMessageCreate',
+        } as any as ProductEventPayload,
+        [matchingRule] as any as Rule[],
+        'external event url',
+        { group: 'g', url: 'u', token: 't' },
+        baseIntegrations,
+        {
+          enableLogger: true,
+          isSchedulerEnabled: true,
+          isUseStaticIP: false,
+          maxProductEventDelay: 30000,
+        },
+      );
+
+      const codes = (Utils.log as sinon.SinonStub).getCalls().map((call) => call.args[2]);
+      assert.include(codes, APITraceCodes.CREATE_SCHEDULE_SKIPPED_EXISTING);
+      assert.isFalse(createStub.called);
+    });
+
+    it('parses conversation_id from job id', () => {
+      assert.equal(
+        TimerRuleEngine.parseConversationIdFromJobId('896905834606006_1162979810778531_rule-A'),
+        '1162979810778531',
+      );
     });
   });
 });

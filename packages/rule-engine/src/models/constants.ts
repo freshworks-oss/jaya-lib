@@ -1,8 +1,4 @@
-import {
-  TriggerActionType,
-  TriggerActorCause,
-  TriggerActorType,
-} from './rule';
+import { TriggerActionType, TriggerActorCause, TriggerActorType } from './rule';
 
 // this is to check and cancel continuous assignment event firing
 export const assignmentConditions = [
@@ -45,4 +41,4 @@ export const assignmentConditions = [
       type: TriggerActorType.System,
     },
   },
-]
+];
